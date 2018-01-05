@@ -1,0 +1,164 @@
+<link rel="import" href="bower_components/polymer/polymer-element.html">
+
+
+
+<link rel="import" href="bower_components/polymer/polymer.html">
+<link rel="import" href="bower_components/iron-ajax/iron-ajax.html">
+<link rel="import" href="bower_components/paper-spinner/paper-spinner-lite.html">
+<link rel="import" href="bower_components/paper-button/paper-button.html">
+
+<script src="bower_components/chart.js/dist/Chart.js"></script>
+<script src="bower_components/moment/moment.js"></script>
+
+
+
+
+
+<dom-module id="bitcoingrafik-element">
+
+  <template>
+    <style>
+        :host {
+        display: block;
+      }
+    </style>
+      <iron-ajax id="coinbase" handle-as="json" on-response="_handleResponse" loading={{loading}}>
+      </iron-ajax>
+
+      <paper-spinner-lite active="[[loading]]"></paper-spinner-lite>
+
+      <div hidden$="[[loading]]">
+          <template is="dom-repeat" items="[[currencies]]">
+              <paper-button noink on-click="_getCurrencyHistoryData" data-item$="[[item.code]]">[[item.name]] - $[[item.price]] </paper-button>
+          </template>
+      </div>
+
+      <div hidden$="[[loading]]" style="width:100%; max-width:700px; margin:0 auto">
+          <canvas height="2" width="4" id="canvas"></canvas>
+      </div>
+
+  </template>
+
+  <script>
+      class BitcoingrafikElement extends Polymer.Element {
+          static get is() { return 'bitcoingrafik-element' }
+          static get properties() {
+              return {
+                  currencies: {
+                      type: Array,
+                      value: [
+                          { code: 'BTC', name: 'Bitcoin', price: 0 },
+                          { code: 'ETH', name: 'Ethereum', price: 0 },
+                          { code: 'LTC', name: 'Litecoin', price: 0 }
+                      ]
+                  },
+                  loading: {
+                      type: Boolean,
+                      notify: true,
+                      value: false
+                  },
+                  myLineChart: {}
+              }
+          }
+
+          ready() {
+              super.ready();
+              Polymer.RenderStatus.afterNextRender(this, () => {
+                  this._getCurrencyData();
+
+              });
+          }
+
+
+          _handleResponse(response) {
+              var _response = response.detail.__data.response;
+              if (_response.data[1] != null) {
+                  this._computeCurrencyPrice(_response);
+              }
+              else {
+                  this._computeGraph(response.detail);
+              }
+          }
+          //GetData Start
+          _getCurrencyData() {
+              const ajax = this.$.coinbase;
+              ajax.url = "https://api.coinbase.com/v2/prices/USD/spot?";
+              ajax.generateRequest();
+          }
+          _getCurrencyHistoryData() {
+              var currency = event.target.dataset.item;
+              const ajax = this.$.coinbase;
+              ajax.url = "https://api.coinbase.com/v2/prices/" + currency + "-USD/historic?period=month";
+              ajax.generateRequest();
+          }
+          //GetData End
+
+          _computeCurrencyPrice(params) {
+              this.set('currencies.0.price', params.data[0].amount);
+              this.set('currencies.1.price', params.data[1].amount);
+              this.set('currencies.2.price', params.data[2].amount);
+          }
+          _computeGraph(data) {
+              var code = data.url.substring(35, 38);
+              var label = [];
+              var price = [];
+
+              data.response.data.prices.forEach((element) => {
+                  label.push(this._computeDateTime(element.time));
+                  price.push(element.price);
+              }, this);
+              this._generateLineChart(label, price, code);
+
+
+          }
+          _computeDateTime(datestring) {
+              if (datestring) {
+                  return moment(datestring, "YYYY-MM-DDThh:mm:aaZ").format('M/DD/YYYY h:mm a');
+              }
+              return datestring;
+          }
+
+          _generateLineChart(label, price, labelName) {
+              if (this.myLineChart !== undefined)
+                  this.myLineChart.destroy();
+              var ctx = this.$.canvas.getContext('2d');
+              this.myLineChart = new Chart(ctx, {
+                  type: 'line',
+                  data: {
+                      labels: label.reverse(),
+                      datasets: [{
+                          pointRadius: 0,
+                          label: labelName,
+                          backgroundColor: ['rgba(111,124,186,0.1)'],
+                          borderColor: ['rgba(111,124,186,1)'],
+                          borderWidth: 2,
+                          data: price.reverse()
+                      }]
+                  },
+                  options: {
+                      animation: false,
+                      tooltips: {
+                          node: 'index',
+                          intersect: false
+                      },
+                      scales: {
+                          xAxes: [{
+                              gridLines: { display: false }
+                          }],
+                          yAxes: [{
+                              ticks: {
+                                  beginAtZero: true
+                              }
+                          }]
+                      }
+                  }
+              });
+          }
+
+      }
+
+      customElements.define(BitcoingrafikElement.is, BitcoingrafikElement);
+
+  </script>
+
+</dom-module>
